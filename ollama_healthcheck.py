@@ -1,8 +1,15 @@
+"""
+ollama_healthcheck.py — CLI tool to check the health of one or more Ollama instances.
+Reads a YAML config file and reports reachability, latency, and loaded models.
+25/05/2026 GASMI Fares
+"""
+
 import argparse
 import yaml
 from dataclasses import dataclass, asdict
 
 
+# Holds the result of a single Ollama health check
 @dataclass
 class HealthResult:
     name: str
@@ -16,6 +23,7 @@ class HealthResult:
 
 
 def main():
+    # Parse CLI arguments
     parser = argparse.ArgumentParser(
         description="Health check pour des instances Ollama.",
     )
@@ -51,6 +59,7 @@ def main():
 
 
 
+# Load target hosts from config file
 def load_config(path: str) -> list[dict]:
     """ Charge la config YAML et retourne la liste des Ollamas configurés """
     with open(path) as f:
