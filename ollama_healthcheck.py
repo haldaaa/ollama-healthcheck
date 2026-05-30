@@ -5,6 +5,8 @@ Reads a YAML config file and reports reachability, latency, and loaded models.
 """
 
 import argparse
+import time
+import httpx
 import yaml
 from dataclasses import dataclass, asdict
 
@@ -53,9 +55,8 @@ def main():
     args = parser.parse_args()
     ollamas = load_config(args.config)
 
-    print(f"Loaded {len(ollamas)} Ollamas from config")
-    for ollama in ollamas:
-        print(f"  - {ollama['name']}: {ollama['url']}")
+    result = check_ollama("local", "http://172.24.144.1:11434", timeout=5)
+    print(result)
 
 
 
@@ -66,6 +67,36 @@ def load_config(path: str) -> list[dict]:
         data = yaml.safe_load(f)
     return data.get("ollamas", [])
 
+
+def check_ollama(name: str, url: str, timeout: int = 5) -> HealthResult:
+    """Check a single Ollama instance and return a HealthResult."""
+    api_url = f"{url.rstrip('/')}/api/tags"
+
+    start = time.time()
+    try:
+        r = httpx.get(api_url, timeout=timeout)
+        r.raise_for_status()
+        latency_ms = (time.time() - start) * 1000
+
+        models = r.json().get("models", [])
+        total_size_mb = sum(m.get("size", 0) for m in models) / (1024 * 1024)
+
+        return HealthResult(
+            name=name,
+            url=url,
+            reachable=True,
+            latency_ms=round(latency_ms, 1),
+            models_count=len(models),
+            models_total_size_mb=round(total_size_mb, 1),
+        )
+    except httpx.TimeoutException:
+        return HealthResult(name=name, url=url, reachable=False, error=f"timeout ({timeout}s)")
+    except httpx.ConnectError:
+        return HealthResult(name=name, url=url, reachable=False, error="connection refused")
+    except httpx.HTTPStatusError as e:
+        return HealthResult(name=name, url=url, reachable=False, error=f"HTTP {e.response.status_code}")
+    except Exception as e:
+        return HealthResult(name=name, url=url, reachable=False, error=str(e))
 
 if __name__ == "__main__":
     main()
