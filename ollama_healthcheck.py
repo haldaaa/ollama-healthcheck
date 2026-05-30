@@ -55,8 +55,15 @@ def main():
     args = parser.parse_args()
     ollamas = load_config(args.config)
 
-    result = check_ollama("local", "http://172.24.144.1:11434", timeout=5)
-    print(result)
+    results = []
+    for ollama in ollamas:
+        result = check_ollama(
+            name=ollama["name"],
+            url=ollama["url"],
+            timeout=ollama.get("timeout", args.timeout),
+        )
+        results.append(result)
+        print(result)
 
 
 
