@@ -8,6 +8,8 @@ import argparse
 import time
 import httpx
 import yaml
+import json
+
 from dataclasses import dataclass, asdict
 
 
@@ -64,7 +66,10 @@ def main():
         )
         results.append(result)
     
-    print(format_text(results))
+    if args.output == "json":
+        print(format_json(results))
+    else:
+        print(format_text(results))
 
 
 
@@ -125,6 +130,13 @@ def format_text(results: list[HealthResult]) ->str:
     healthy = sum(1 for r in results if r.reachable)
     lines.append(f"\nSummary: {healthy}/{len(results)} healthy")
     return "\n".join(lines)
+
+
+
+def format_json(results: list[HealthResult]) -> str:
+    """ Résultat en JSON """
+
+    return json.dumps([asdict(r) for r in results], indent=2)
 
 if __name__ == "__main__":
     main()
