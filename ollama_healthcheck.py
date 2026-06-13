@@ -63,7 +63,8 @@ def main():
             timeout=ollama.get("timeout", args.timeout),
         )
         results.append(result)
-        print(result)
+    
+    print(format_text(results))
 
 
 
@@ -105,5 +106,27 @@ def check_ollama(name: str, url: str, timeout: int = 5) -> HealthResult:
     except Exception as e:
         return HealthResult(name=name, url=url, reachable=False, error=str(e))
 
+
+def format_text(results: list[HealthResult]) ->str:
+    """Format results as human-readable text."""
+    
+    lines = []
+    for r in results:
+        if r.reachable:
+            lines.append(
+                f"[OK] {r.name:15} {r.url:35}"
+                f"latency={r.latency_ms}ms   "
+                f"models={r.models_count}   "
+                f"size={r.models_total_size_mb}MB"
+            )
+        else:
+            lines.append(f"[FAIL] {r.name:15} {r.url:35} error={r.error}")
+
+    healthy = sum(1 for r in results if r.reachable)
+    lines.append(f"\nSummary: {healthy}/{len(results)} healthy")
+    return "\n".join(lines)
+
 if __name__ == "__main__":
     main()
+
+
