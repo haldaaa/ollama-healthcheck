@@ -9,7 +9,7 @@ import time
 import httpx
 import yaml
 import json
-
+import logging
 from dataclasses import dataclass, asdict
 
 
@@ -25,37 +25,27 @@ class HealthResult:
     error: str | None = None
 
 
-
 def main():
     # Parse CLI arguments
     parser = argparse.ArgumentParser(
         description="Health check pour des instances Ollama.",
     )
-    parser.add_argument(
-        "--config",
-        required=True,
-        help="Chemin vers le fichier YAML de config (liste des Ollamas)",
-    )
-    parser.add_argument(
-        "--output",
-        choices=["text", "json"],
-        default="text",
-        help="Format de sortie",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=5,
-        help="Timeout par check, en secondes (default: 5)",
-    )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Active les logs DEBUG",
-    )
+    parser.add_argument("--config", required=True, help="Chemin vers le fichier YAML de config")
+    parser.add_argument("--output", choices=["text", "json"], default="text", help="Format de sortie")
+    parser.add_argument("--timeout", type=int, default=5, help="Timeout par check en secondes (default: 5)")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Active les logs DEBUG")
 
     args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    logger = logging.getLogger(__name__)
+
+    logger.info("Loading config from %s", args.config)
     ollamas = load_config(args.config)
+    logger.info("Checking %s ollamas...", len(ollamas))
 
     results = []
     for ollama in ollamas:
@@ -65,17 +55,16 @@ def main():
             timeout=ollama.get("timeout", args.timeout),
         )
         results.append(result)
-    
+
     if args.output == "json":
         print(format_json(results))
     else:
         print(format_text(results))
 
 
-
 # Load target hosts from config file
 def load_config(path: str) -> list[dict]:
-    """ Charge la config YAML et retourne la liste des Ollamas configurés """
+    """Charge la config YAML et retourne la liste des Ollamas configurés."""
     with open(path) as f:
         data = yaml.safe_load(f)
     return data.get("ollamas", [])
@@ -84,16 +73,16 @@ def load_config(path: str) -> list[dict]:
 def check_ollama(name: str, url: str, timeout: int = 5) -> HealthResult:
     """Check a single Ollama instance and return a HealthResult."""
     api_url = f"{url.rstrip('/')}/api/tags"
+    logger = logging.getLogger(__name__)
+    logger.debug("Checking %s at %s", name, url)
 
     start = time.time()
     try:
         r = httpx.get(api_url, timeout=timeout)
         r.raise_for_status()
         latency_ms = (time.time() - start) * 1000
-
         models = r.json().get("models", [])
         total_size_mb = sum(m.get("size", 0) for m in models) / (1024 * 1024)
-
         return HealthResult(
             name=name,
             url=url,
@@ -112,33 +101,28 @@ def check_ollama(name: str, url: str, timeout: int = 5) -> HealthResult:
         return HealthResult(name=name, url=url, reachable=False, error=str(e))
 
 
-def format_text(results: list[HealthResult]) ->str:
+def format_text(results: list[HealthResult]) -> str:
     """Format results as human-readable text."""
-    
     lines = []
     for r in results:
         if r.reachable:
             lines.append(
-                f"[OK] {r.name:15} {r.url:35}"
+                f"[OK]   {r.name:15} {r.url:35} "
                 f"latency={r.latency_ms}ms   "
                 f"models={r.models_count}   "
                 f"size={r.models_total_size_mb}MB"
             )
         else:
             lines.append(f"[FAIL] {r.name:15} {r.url:35} error={r.error}")
-
     healthy = sum(1 for r in results if r.reachable)
     lines.append(f"\nSummary: {healthy}/{len(results)} healthy")
     return "\n".join(lines)
 
 
-
 def format_json(results: list[HealthResult]) -> str:
-    """ Résultat en JSON """
-
+    """Format results as JSON."""
     return json.dumps([asdict(r) for r in results], indent=2)
+
 
 if __name__ == "__main__":
     main()
-
-
